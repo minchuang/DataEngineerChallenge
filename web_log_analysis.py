@@ -25,10 +25,10 @@
 # - Flink
 # - Cascading, Cascalog, or Scalding
 
-# If you need Hadoop, we suggest 
+# If you need Hadoop, we suggest
 # HDP Sandbox:
 # http://hortonworks.com/hdp/downloads/
-# or 
+# or
 # CDH QuickStart VM:
 # http://www.cloudera.com/content/cloudera/en/downloads.html
 
@@ -120,12 +120,12 @@ def parse_logs(spark, logFile, numPartitions=10):
     # repatitions and cache the df
     init_df = spark.read.csv(logFile, schema=log_schema, sep=" ").repartition(numPartitions).cache()
     # print (init_df.rdd.getNumPartitions())
-    # 
+    #
     # etl access data
     split_clinet = split(init_df["client:port"], ":")
     split_backend = split(init_df["backend:port"], ":")
     split_request = split(init_df["request"], " ")
-    # 
+    #
     df = init_df.withColumn("client_ip", split_clinet.getItem(0)) \
                 .withColumn("client_port", split_clinet.getItem(1)) \
                 .withColumn("backend_ip", split_backend.getItem(0)) \
@@ -160,19 +160,19 @@ def Sessionize(df_logs, session_time=15):
     """
     session_time_secs = session_time * 60
     window_func_ip = Window.partitionBy("client_ip").orderBy("curr_timestamp")
-    df = df_logs.withColumn("prev_timestamp", 
+    df = df_logs.withColumn("prev_timestamp",
                             lag(col("curr_timestamp")).over(window_func_ip)) \
-                .withColumn("session_lasts", 
+                .withColumn("session_lasts",
                             get_time_diff(col("prev_timestamp"), col("curr_timestamp"))) \
-                .withColumn("new_session_flag", 
+                .withColumn("new_session_flag",
                             when((col("session_lasts") > session_time_secs), 1).otherwise(0)) \
-                .withColumn("count_session", 
+                .withColumn("count_session",
                             sum(col("new_session_flag")).over(window_func_ip)) \
-                .withColumn("ip_session_count", 
+                .withColumn("ip_session_count",
                             concat_ws("_", col("client_ip"), col("count_session")))
-    
+
     df_ip_session = df.select(["ip_session_count", "client_ip", "request_url",
-                               "prev_timestamp", "curr_timestamp", 
+                               "prev_timestamp", "curr_timestamp",
                                "session_lasts", "new_session_flag", "count_session"])
     return df_ip_session
 
@@ -183,9 +183,9 @@ def analyze_session_time(df_ip_session, save_res_to_csv=False):
     Determine the average session time.
     """
     window_func_session = Window.partitionBy("ip_session_count").orderBy("curr_timestamp")
-    df_session = df_ip_session.withColumn("prev_timestamp_session", 
+    df_session = df_ip_session.withColumn("prev_timestamp_session",
                               lag(df_ip_session["curr_timestamp"]).over(window_func_session)) \
-                  .withColumn("current_session_lasts", 
+                  .withColumn("current_session_lasts",
                               get_time_diff(col("prev_timestamp_session"), col("curr_timestamp")))
     #
     df_session_total = df_session.groupby("ip_session_count").agg(
@@ -259,3 +259,63 @@ if __name__ == "__main__":
     save_res_to_csv = True
     #
     exec_analysis(spark, logFile, numPartitions, session_time, save_res_to_csv)
+
+"""
++------------------+
+|  avg_session_time|
++------------------+
+|125.63083815583757|
++------------------+
+
++-----------------+---------------------+
+| ip_session_count|count_unique_requests|
++-----------------+---------------------+
+|115.248.233.203_2|                   86|
+| 59.165.251.191_2|                   86|
+|117.239.224.160_1|                   65|
+|205.175.226.101_0|                   89|
+|    8.37.228.47_1|                   69|
+| 115.249.21.130_0|                   10|
+|   202.91.134.7_4|                   10|
+| 122.164.34.125_0|                    8|
+|  182.68.136.65_0|                  104|
+|115.242.129.233_0|                    7|
+| 223.255.247.66_0|                    7|
+| 59.184.184.157_0|                    9|
+|  188.40.94.195_1|                   89|
+|   182.69.48.36_0|                  108|
+| 117.210.14.119_0|                    3|
+|  192.193.164.9_1|                   55|
+|  101.57.193.44_0|                   82|
+|122.179.135.178_0|                    8|
+|    1.39.61.253_0|                   59|
+| 115.111.50.254_1|                   18|
++-----------------+---------------------+
+only showing top 20 rows
+
++---------------+----------------+------------+-----------------+----------------+
+|      client_ip|session_time_all|num_sessions|session_lasts_max|avg_session_time|
++---------------+----------------+------------+-----------------+----------------+
+|   27.120.106.3|   66298.9140625|           2|        66298.914|  33149.45703125|
+|117.255.253.155|     57422.78125|           2|         57422.78|    28711.390625|
+|     1.38.21.92|  54168.50390625|           2|        54168.504| 27084.251953125|
+| 163.53.203.235|   54068.0390625|           2|         54068.04|  27034.01953125|
+|   66.249.71.10|   53818.8046875|           2|        53818.805|  26909.40234375|
+|    1.38.22.103|  50599.78515625|           2|        50599.785| 25299.892578125|
+| 167.114.100.25|  50401.54296875|           2|        50401.543| 25200.771484375|
+|    75.98.9.249|   49283.2578125|           2|        49283.258|  24641.62890625|
+|107.167.112.248|      49079.5625|           2|        49079.562|     24539.78125|
+| 168.235.200.74|   48446.5703125|           2|         48446.57|  24223.28515625|
+| 122.174.94.202|     48349.15625|           2|        48349.156|    24174.578125|
+| 117.253.108.44|   46465.7421875|           2|        46465.742|  23232.87109375|
+| 117.244.25.135|  46324.63671875|           2|        46324.637| 23162.318359375|
+|  182.75.33.150|  46251.28515625|           2|        46251.285| 23125.642578125|
+|    8.37.225.38|   46245.2734375|           2|        46245.273|  23122.63671875|
+|      1.38.13.1|    46214.453125|           2|        46214.453|   23107.2265625|
+|    1.39.61.171|   46112.8359375|           2|        46112.836|  23056.41796875|
+|  49.156.86.219|  45112.31640625|           2|        45112.316| 22556.158203125|
+| 199.190.46.117|  45029.84765625|           2|        45029.848| 22514.923828125|
+|   122.15.56.59|  44929.15234375|           2|        44929.152| 22464.576171875|
++---------------+----------------+------------+-----------------+----------------+
+only showing top 20 rows
+"""

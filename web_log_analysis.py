@@ -233,12 +233,13 @@ def exec_analysis(spark, logFile, numPartitions=10, session_time=15, save_res_to
     """
     # parese the logs by regex -> slow
     # parse the logs
-    df_logs = parse_logs(spark, logFile, numPartitions).repartition(numPartitions).cache()
+    df_logs = parse_logs(spark, logFile, numPartitions).cache()
     df_ip_session = Sessionize(df_logs, session_time).repartition(numPartitions).cache()
     df_session = analyze_session_time(df_ip_session, save_res_to_csv).repartition(numPartitions).cache()
     df_unique_url = count_unique_request(df_session).cache()
     df_ip_time = get_longest_session_time(df_session).cache()
     if save_res_to_csv:
+        df_logs.coalesce(1).write.csv(path="df_logs.csv", header=True, sep=",", mode="overwrite")
         df_session.coalesce(1).write.csv(path="df_session.csv", header=True, sep=",", mode="overwrite")
         df_unique_url.coalesce(1).write.csv(path="df_unique_url.csv", header=True, sep=",", mode="overwrite")
         df_ip_time.coalesce(1).write.csv(path="df_ip_time.csv", header=True, sep=",", mode="overwrite")
@@ -260,6 +261,8 @@ if __name__ == "__main__":
     #
     exec_analysis(spark, logFile, numPartitions, session_time, save_res_to_csv)
 
+
+# results
 """
 +------------------+
 |  avg_session_time|
@@ -318,4 +321,6 @@ only showing top 20 rows
 |   122.15.56.59|  44929.15234375|           2|        44929.152| 22464.576171875|
 +---------------+----------------+------------+-----------------+----------------+
 only showing top 20 rows
+
+Command took 2.35 minutes -- by cnminchuang@gmail.com at 2019/4/25 13:11:41 on test
 """
